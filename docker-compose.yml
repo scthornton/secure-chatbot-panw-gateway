@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    image: secure-chatbot-panw-gateway:local
+    container_name: secure-chatbot-gateway
+    env_file: .env
+    environment:
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "8000"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

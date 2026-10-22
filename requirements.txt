@@ -1,0 +1,16 @@
+# Secure Chatbot via the Prisma AIRS AI Gateway - Python dependencies
+#
+# Install with: pip install -r requirements.txt
+# Everything comes from public PyPI. Requires Python 3.10+.
+
+# HTTP client for the gateway (and the optional direct AIRS comparison call)
+requests>=2.31.0
+
+# Web front end (web_app.py). Not needed for the terminal chatbot.
+flask>=3.0.0
+
+# Loads .env into the environment (real environment variables win)
+python-dotenv>=1.0.0
+
+# For a reproducible install, pin exact versions after your first successful
+# run: pip freeze > requirements.lock
