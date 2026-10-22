@@ -85,14 +85,17 @@ Everything that makes this secure lives in Strata Cloud Manager, not in the app.
 1. **Provider.** Catalogs > LLMs > Configure New LLM. Give it a slug (for example `openai`) and the provider API key, and enable models on the Available Models tab. The slug becomes the model prefix: `@openai/gpt-4o-mini`.
 2. **AIRS guardrail.** Policies & Profiles > Guardrails > create a **PANW Prisma AIRS** check. Set the **Profile Name** to a real AIRS security profile. Set **Async = FALSE** (so it can block) and **Deny = TRUE** (so a fail returns 446). Copy the guardrail id (`pg-...`).
    - On tenants where AI Runtime appears natively under Guardrails > Pro, pick the security profile from the list instead of pasting a scan key.
-3. **Config.** Policies & Profiles > Config > create one that references the guardrail in both `input_guardrails` and `output_guardrails`. Copy the config id (`pc-...`).
-   ```json
-   { "input_guardrails": ["pg-..."], "output_guardrails": ["pg-..."] }
-   ```
-4. **Service key.** Security Keys > new **service key**. Attach a budget and rate limit if you want hard caps, add default metadata (`app`, `team`), and set the config above as the key's default if the build supports it. Copy the key once; it is not shown again.
-5. **Workspace.** If the gateway deployment is bound to specific workspaces, mint the key inside a workspace that gateway serves.
+3. **Attach the guardrail.** Pick one of these; do not stack them or every request is scanned twice.
+   - **Workspace level (simplest for a POV):** AI Gateway > Workspace Control > your workspace > **Workspace Guardrails**. Select the AIRS guardrail as both Input and Output guardrail, Update. Every key in that workspace is covered and `AIGW_CONFIG` stays empty.
+   - **Config level:** Policies & Profiles > Config > create one that references the guardrail, copy the `pc-...` id, and set it as `AIGW_CONFIG` (the app sends it as `x-portkey-config`). Some SCM builds also let you set a default config on the key.
+     ```json
+     { "input_guardrails": ["pg-..."], "output_guardrails": ["pg-..."] }
+     ```
+   - **Org level:** Admin Settings > Organisation Guardrails applies to every request on the tenant.
+4. **Service key.** Security Keys > new **service key** inside the workspace. Attach a budget and rate limit if you want hard caps, add default metadata (`app`, `team`). Copy the key once; it is not shown again.
+5. **Workspace binding.** If the gateway deployment is bound to specific workspaces, the key must come from a workspace that gateway serves.
 
-Then in `.env`: `AIGW_API_KEY` = the service key, `AIGW_MODEL` = `@<slug>/<model>`, `AIGW_CONFIG` = the `pc-...` id (or leave empty if it is the key's default).
+Then in `.env`: `AIGW_API_KEY` = the service key, `AIGW_MODEL` = `@<slug>/<model>`, `AIGW_CONFIG` = the `pc-...` id (or leave empty with workspace- or org-level guardrails).
 
 ## Running on a VM
 
