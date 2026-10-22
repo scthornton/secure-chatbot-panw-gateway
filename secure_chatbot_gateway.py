@@ -42,9 +42,11 @@ def print_hooks(hooks):
     for stage in ("input", "output"):
         for hook in hooks[stage]:
             verdict = "PASS" if hook["verdict"] else "FAIL"
-            mode = "deny" if hook["deny"] else "log-only"
             run = "async" if hook["async"] else "sync"
-            print(f"   {stage:6s} guardrail {hook['id']}: {verdict} ({run}, {mode}, {hook['ms']} ms)")
+            # The gateway reports deny only on a failed hook, so the deny /
+            # log-only mode is known only when the verdict is FAIL.
+            mode = "" if hook["verdict"] else (", deny" if hook["deny"] else ", log-only")
+            print(f"   {stage:6s} guardrail {hook['id']}: {verdict} ({run}{mode}, {hook['ms']} ms)")
             for check in hook["checks"]:
                 mark = "ok  " if check["verdict"] else "FAIL"
                 line = f"      [{mark}] {check['id']} ({check['ms']} ms)"
@@ -122,7 +124,7 @@ def main():
         print_direct("prompt", direct_prompt)
 
         if result["blocked"]:
-            print("\nBLOCKED by the gateway guardrail (HTTP 446). The prompt never reached the model.")
+            print(f"\nBLOCKED by the gateway guardrail (HTTP {result['status']}). The prompt never reached the model, or the reply was withheld.")
             if result["error"]:
                 print(f"   {result['error']}")
             history.pop()  # keep the blocked turn out of the conversation

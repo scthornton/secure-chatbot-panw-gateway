@@ -97,7 +97,7 @@
     <div class="card section">
       <h2>How to read this</h2>
       <div style="font-size:13px; color: var(--muted)">
-        <b>200</b> allowed. <b>446</b> blocked by a guardrail with Deny on; the prompt never reached the model.
+        <b>200</b> allowed. <b>446</b> blocked by a guardrail with Deny on; the prompt never reached the model. Hosted gateway 2.30+ returns a denial as <b>200</b> with a canned message, zero usage and <code>deny: true</code> in <code>hook_results</code>; this app reads the verdict, not the status.
         <b>246</b> a guardrail failed but Deny is off, so the request went through (log-only mode).
         Prompt-side detectors run before the model; response-side detectors run on the model's reply.
         Search the trace id in the gateway's Logs view to see the same call from the gateway's side.
@@ -169,7 +169,7 @@
       for (const hook of h[stage]) {
         const v = hook.verdict ? '<span class="pill ok">PASS</span>' : '<span class="pill bad">FAIL</span>';
         html += '<div class="hook"><div class="row"><span><b>' + stage + '</b> guardrail <code>' + esc(hook.id) + '</code></span>' + v + "</div>";
-        html += '<div class="check">' + (hook.async ? "async (log only)" : "sync") + ", " + (hook.deny ? "deny on fail" : "allow on fail") + ", " + esc(hook.ms) + " ms</div>";
+        html += '<div class="check">' + (hook.async ? "async (log only)" : "sync") + (hook.verdict ? "" : (hook.deny ? ", denied" : ", failed but allowed (Deny off)")) + ", " + esc(hook.ms) + " ms</div>";
         for (const c of hook.checks) {
           html += '<div class="check">' + (c.verdict ? "ok" : "FAIL") + " <code>" + esc(c.id) + "</code> " + esc(c.ms) + " ms";
           if (c.error) html += ' <span style="color:var(--warn)">error: ' + esc(c.error) + "</span>";
@@ -213,7 +213,7 @@
       if (res.error && res.status == null) { add("error", res.error + (res.problems ? "\n" + res.problems.join("\n") : "")); history.pop(); return; }
       renderCall(res); renderHooks(res.hooks); renderDirect(res.direct);
       if (res.blocked) {
-        add("blocked", "Blocked by the gateway guardrail (HTTP 446). The prompt never reached the model.", res.error || "");
+        add("blocked", "Blocked by the gateway guardrail (HTTP " + res.status + "). The prompt never reached the model, or the reply was withheld.", res.error || "");
         history.pop();
       } else if (res.status === 200 || res.status === 246) {
         const fl = [];

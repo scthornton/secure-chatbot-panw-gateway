@@ -26,7 +26,7 @@ try:
 except ImportError:  # python-dotenv is optional
     pass
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # ---------------------------------------------------------------------------
 # Configuration (all from the environment; see .env.example)
@@ -159,11 +159,12 @@ def _summarize_hooks(body):
         "present": bool,
         "input":  [ {id, verdict, deny, async, checks:[{id, verdict, ms, airs:{...}}]} ],
         "output": [ ... same ... ],
-        "failed": bool   # any sync check failed
+        "failed": bool,  # any sync guardrail failed
+        "denied": bool   # a failed sync guardrail had deny=true (request or response withheld)
       }
     """
     hooks = (body or {}).get("hook_results") or {}
-    out = {"present": bool(hooks), "input": [], "output": [], "failed": False}
+    out = {"present": bool(hooks), "input": [], "output": [], "failed": False, "denied": False}
     for stage, key in (("input", "before_request_hooks"), ("output", "after_request_hooks")):
         for hook in hooks.get(key) or []:
             checks = []
@@ -197,6 +198,8 @@ def _summarize_hooks(body):
             }
             if hook.get("verdict") is False and not hook.get("async"):
                 out["failed"] = True
+                if hook.get("deny"):
+                    out["denied"] = True
             out[stage].append(entry)
     return out
 
@@ -230,7 +233,7 @@ def chat(messages, trace_id=None):
 
     result = {
         "status": None, "blocked": False, "text": "", "error": None,
-        "hooks": {"present": False, "input": [], "output": [], "failed": False},
+        "hooks": {"present": False, "input": [], "output": [], "failed": False, "denied": False},
         "headers": {}, "usage": None, "model": None, "latency_ms": None,
         "trace_id": trace_id,
     }
@@ -276,9 +279,17 @@ def chat(messages, trace_id=None):
         content = message.get("content")
         if isinstance(content, list):  # some providers return content blocks
             content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-        result["text"] = content or ""
         result["usage"] = body.get("usage")
         result["model"] = body.get("model")
+        # Gateway 2.30+ (hosted) answers a denied request with HTTP 200, a
+        # canned "guardrail checks ... failed" message in choices, zero usage
+        # and model "unknown" instead of HTTP 446. The hook_results carry the
+        # real verdict, so treat a failed deny guardrail as a block either way.
+        if result["hooks"]["denied"]:
+            result["blocked"] = True
+            result["error"] = content or "Blocked by a gateway guardrail."
+            return result
+        result["text"] = content or ""
         return result
 
     if resp.status_code == 446:
@@ -290,9 +301,18 @@ def chat(messages, trace_id=None):
     err = body.get("error") or body.get("message") or body
     result["error"] = err.get("message", json.dumps(err)) if isinstance(err, dict) else str(err)
     if resp.status_code == 401:
-        result["error"] += (" (Invalid API Key / Error Code 03 means the key is not from this gateway's "
-                            "tenant: an SCM Security Key only works on aigw.portkey.ai or your hybrid data plane, "
-                            "a standalone Portkey key only on api.portkey.ai)")
+        if body.get("provider") or "error:" in (result["error"] or ""):
+            # The gateway accepted AIGW_API_KEY and ran the input guardrail; the
+            # upstream provider rejected the key stored in the provider
+            # integration (for example "anthropic error: invalid x-api-key").
+            result["error"] += (f" (the gateway authenticated this app and the input guardrail ran; "
+                                f"the provider integration behind {AIGW_MODEL or 'the model'} holds an "
+                                f"invalid or expired provider key. Fix it under AI Gateway > Providers / "
+                                f"Model Catalog in Strata Cloud Manager, or point AIGW_MODEL at another slug)")
+        else:
+            result["error"] += (" (Invalid API Key / Error Code 03 means the key is not from this gateway's "
+                                "tenant: an SCM Security Key only works on aigw.portkey.ai or your hybrid data plane, "
+                                "a standalone Portkey key only on api.portkey.ai)")
     return result
 
 

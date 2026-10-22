@@ -9,6 +9,7 @@ gateway returns when a Prisma AIRS guardrail is attached with Async=FALSE.
 
 Verdict rules (keyword based, this is a mock):
   prompt contains "ignore all previous instructions"  -> 446, input guardrail FAIL (injection)
+  prompt contains "system prompt"                      -> 200 + canned denial message (hosted gateway 2.30+ shape)
   prompt contains "ssn" or "social security"           -> reply leaks an SSN, output guardrail FAIL -> 446
   prompt starts with "246 "                            -> 246, input guardrail FAIL but allowed (Deny off)
   anything else                                        -> 200, guardrails PASS, echo-style reply
@@ -94,6 +95,16 @@ class Handler(BaseHTTPRequestHandler):
                 "error": {"message": "The guardrail checks defined in the config failed. You can find more information in the `hook_results` object.", "type": "hooks_failed", "param": None, "code": None},
                 "hook_results": {"before_request_hooks": [hook("pg-mock-airs", False, data)], "after_request_hooks": []},
             })
+
+        if "system prompt" in low:
+            # Hosted gateway 2.30+ shape: HTTP 200, canned text in choices, zero
+            # usage, model "unknown", verdict only in hook_results (deny=true).
+            data = airs_data("block", prompt_hits=("injection",))
+            canned = "The guardrail checks defined in the config failed. You can find more information in the `hook_results` object."
+            resp = self._completion(body, canned, before=hook("pg-mock-airs", False, data))
+            resp["model"] = "unknown"
+            resp["usage"] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            return self._send(200, resp)
 
         if low.startswith("246 "):
             data = airs_data("block", prompt_hits=("injection",))

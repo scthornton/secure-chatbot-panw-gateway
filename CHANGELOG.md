@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.1] - 2026-10-22
+
+First run against a live Prisma AIRS AI Gateway tenant (aigw.portkey.ai,
+gateway 2.30.0, two PANW Prisma AIRS guardrails attached at workspace level).
+
+### Fixed
+- A denied request on hosted gateway 2.30+ comes back as HTTP 200 with the
+  canned "guardrail checks ... failed" text in `choices`, zero usage and
+  `model: "unknown"`, not HTTP 446. The app showed that text as an assistant
+  reply. It now reads `deny: true` on the failed hook in `hook_results` and
+  reports a block on either shape (`hooks.denied`).
+- A 401 passed through from the provider ("anthropic error: invalid
+  x-api-key") was labeled as a bad gateway key. The hint now distinguishes a
+  provider-integration key problem from an "Error Code 03" gateway key problem.
+
+### Added
+- Mock gateway rule for the 200 + canned denial shape ("system prompt" in the
+  prompt) and a selftest case for it.
+- README note on the two denial shapes and why to key on `hook_results`.
+
 ## [1.0.0] - 2026-10-22
 
 ### Added
